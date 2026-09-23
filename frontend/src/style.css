@@ -389,7 +389,7 @@ h1 {
 }
 .run-status small {
   position: absolute;
-  left: 20px;
+  right: 0;
   top: 21px;
   font-size: 9px;
   color: #93a08a;
@@ -1671,3 +1671,41 @@ h1 {
     animation: none !important;
   }
 }
+
+/* Corpus comparison and auditable investigation */
+.synthetic-notice {margin-bottom:16px;padding:12px 16px;background:#eef4fc;border:1px solid #d3e0f2;border-radius:10px;color:#38527c;font-size:13px;}
+.doc-pair {flex-wrap:wrap;min-width:0;gap:12px;}
+.doc-pair button {min-width:180px;max-width:280px;}
+.document-strip {align-items:flex-start;}
+.section-copy {padding:0 24px 18px;color:#65748a;font-size:13px;line-height:1.7;}
+.matrix-query {width:min(440px,100%);padding:10px 14px;border:1px solid #d9e0e9;border-radius:8px;}
+.matrix-panel select {max-width:280px;padding:10px;border:1px solid #d9e0e9;border-radius:8px;background:white;}
+.matrix-scroll {width:100%;overflow-x:auto;}
+.audit-matrix {width:100%;min-width:960px;border-collapse:collapse;font-size:13px;text-align:left;}
+.audit-matrix th {background:#f4f7fb;color:#506176;padding:14px 18px;border-block:1px solid #e1e7ef;}
+.audit-matrix td {vertical-align:top;padding:18px;border-bottom:1px solid #e6ebf2;line-height:1.65;width:28%;}
+.audit-matrix td:nth-child(3),.audit-matrix td:nth-child(4) {width:22%;}
+.audit-matrix td p {margin:8px 0;}
+.audit-matrix td .text-button {display:block;text-align:left;margin-top:10px;}
+.audit-matrix .badge {white-space:normal;line-height:1.5;}
+.audit-matrix details {font-size:12px;color:#5c6c82;}
+.audit-matrix summary {cursor:pointer;}
+.matrix-claim + .matrix-claim {margin-top:14px;padding-top:12px;border-top:1px dashed #dce3eb;}
+.matrix-locator {display:block;margin-top:10px;color:#6a798d;overflow-wrap:anywhere;}
+.matrix-pagination {display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:18px 24px;font-size:13px;}
+.matrix-pagination span {margin-right:auto;color:#65748a;}
+.matrix-pagination button {border:1px solid #d4ddea;border-radius:7px;padding:7px 12px;}
+.matrix-pagination button:disabled {opacity:.35;cursor:default;}
+.review-progress,.recommendation {margin:20px 0;padding:18px 20px;background:#f7f9fc;border:1px solid #e1e7ef;border-radius:10px;line-height:1.7;}
+.recommendation p {margin:10px 0;}
+.investigation-log {list-style:none;counter-reset:steps;padding:0;margin:20px 0;}
+.investigation-log li {counter-increment:steps;position:relative;margin:0 0 14px;padding:18px 18px 18px 48px;border:1px solid #dde5ef;border-radius:10px;}
+.investigation-log li:before {content:counter(steps);position:absolute;left:16px;top:18px;color:#6888b2;font-size:14px;font-weight:700;}
+.investigation-log p {white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.75;margin:8px 0;color:#5f6f85;}
+.drawer-tabs {overflow-x:auto;flex-wrap:wrap;}
+.drawer-tabs button {white-space:normal;}
+.quote strong {overflow-wrap:anywhere;}
+.conclusion-heading {flex-wrap:wrap;gap:12px;}
+.demo-actions {display:flex;gap:16px;flex-wrap:wrap;margin-top:18px;}
+.upload-slot strong {overflow-wrap:anywhere;}
+.candidate-checks {font-size:12px;color:#806636;}

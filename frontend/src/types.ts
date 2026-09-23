@@ -58,6 +58,10 @@ export interface Finding {
 export interface Search {
   id: string;
   query: string;
+  before_claim: string | null;
+  searched_version: "before" | "after";
+  searched_document_ids: string[];
+  matched_span_ids: string[];
   searched_span_ids: string[];
   exact_match_count: number;
   exhaustive: boolean;
@@ -99,6 +103,35 @@ export interface Audit {
   coverage: Record<string, number>;
   conclusion: Evidence[];
   limitations: string[];
+  matrix: MatrixRow[];
+  investigations: {finding_id: string; steps: {action: string; detail: string; source_span_ids: string[]; search_result_ids: string[]}[]}[];
+  recommendations: {priority: string; action: string; finding_ids: string[]; source_span_ids: string[]}[];
+}
+export interface MatrixRow {
+  id: string;
+  before_claim_id: string | null;
+  after_claim_ids: string[];
+  finding_ids: string[];
+  status: string;
+  source_span_ids: string[];
+  search_result_ids: string[];
+}
+export interface Candidate {
+  before_claim: string;
+  after_claim: string;
+  relation: string;
+  confidence: number;
+  evidence: string[];
+  checks?: {same_owner: boolean; same_modality: boolean; same_context: boolean};
+}
+export interface AIInvestigation {
+  finding_id: string;
+  mode: string;
+  status: string;
+  message: string;
+  cached?: boolean;
+  candidates: Candidate[];
+  steps: {number: number; tool: string; arguments: Record<string,unknown>; status: string; result: Record<string, unknown>; source_span_ids: string[]}[];
 }
 export interface Review {
   id: number;

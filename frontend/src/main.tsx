@@ -22,7 +22,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { Audit, Claim, Finding, FindingType, Review, Span } from "./types";
+import type { Audit, Claim, Finding, FindingType, Review, Span, Candidate, AIInvestigation } from "./types";
+import { AuditMatrix } from "./AuditMatrix";
 import "./style.css";
 
 const labels: Record<FindingType, string> = {
@@ -55,6 +56,7 @@ const reviewLabels: Record<string, string> = {
 const nav = [
   { id: "overview", name: "Обзор аудита", icon: LayoutDashboard },
   { id: "functions", name: "Функции и выводы", icon: GitBranch },
+  { id: "matrix", name: "Матрица функций", icon: ListFilter },
   { id: "units", name: "Подразделения", icon: ShieldCheck },
   { id: "conclusion", name: "Заключение", icon: FileText },
 ];
@@ -172,9 +174,11 @@ function App() {
     [elapsed, setElapsed] = useState<number | null>(null),
     [cached, setCached] = useState(false),
     [aiMessage, setAiMessage] = useState("");
+  const [aiCandidates, setAiCandidates] = useState<Candidate[]>([]);
+  const [aiInvestigation, setAiInvestigation] = useState<AIInvestigation | null>(null);
   const beforeFile = useRef<HTMLInputElement>(null),
     afterFile = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  const [files, setFiles] = useState<Record<string, File[]>>({before: [], after: []});
   useEffect(() => {
     api<typeof health>("/api/health")
       .then(setHealth)
@@ -259,28 +263,31 @@ function App() {
     setDrawerTab("evidence");
     setNote("");
     setReviewError("");
+    setAiInvestigation(null);
   };
   const openSources = (ids: string[]) => {
     setFinding(null);
     setSourceIds(ids);
     setDrawerTab("evidence");
   };
-  async function run(demo = false) {
+  async function run(demo: false | "original" | "synthetic" = false) {
     setBusy(true);
     setError("");
     const t = performance.now();
     try {
       let result;
       if (demo)
-        result = await api<{ record: Audit; cached: boolean }>("/api/demo", {
+        result = await api<{ record: Audit; cached: boolean }>(demo === "synthetic" ? "/api/demo/synthetic" : "/api/demo", {
           method: "POST",
         });
       else {
-        if (!files.before || !files.after)
-          throw new Error("Выберите обе версии документа.");
+        if (!files.before.length || !files.after.length)
+          throw new Error("Выберите файлы для обеих версий.");
         const body = new FormData();
-        body.append("before", files.before);
-        body.append("after", files.after);
+        for (const version of ["before", "after"]) {
+          if (files[version].length > 8) throw new Error("Допускается до 8 файлов на версию.");
+          for (const file of files[version]) body.append(version, file);
+        }
         result = await api<{ record: Audit; cached: boolean }>("/api/audits", {
           method: "POST",
           body,
@@ -294,6 +301,8 @@ function App() {
       setQuery("");
       setUpload(false);
       setAiMessage("");
+      setAiCandidates([]);
+      setAiInvestigation(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -325,18 +334,30 @@ function App() {
     if (!record) return;
     setSaving(true);
     try {
-      const result = await api<{ message: string; candidates: unknown[] }>(
+      const result = await api<{ message: string; candidates: Candidate[] }>(
         `/api/audits/${record.id}/suggestions`,
         { method: "POST" },
       );
       setAiMessage(
         `${result.message} Кандидатов: ${result.candidates.length}.`,
       );
+      setAiCandidates(result.candidates);
     } catch (e) {
       setAiMessage((e as Error).message);
     } finally {
       setSaving(false);
     }
+  }
+  async function investigateFinding() {
+    if (!record || !finding) return;
+    setSaving(true);
+    setAiMessage("");
+    try {
+      const result = await api<AIInvestigation>(`/api/audits/${record.id}/findings/${finding.id}/investigate`, {method: "POST"});
+      setAiInvestigation(result);
+      setAiMessage(result.message);
+    } catch (e) { setAiMessage((e as Error).message); }
+    finally { setSaving(false); }
   }
   const selectFilter = (type: string) => {
     setFilter(type);
@@ -416,6 +437,10 @@ function App() {
     );
   }
 
+  function candidateCard(c: Candidate) {
+    return <button className="candidate" key={`${c.before_claim}:${c.after_claim}`} onClick={()=>{setSourceIds([...new Set([...(finding?.source_span_ids||[]),...c.evidence])]);setDrawerTab("evidence")}}><span className="badge amber">Предложение AI · требуется проверка</span><p><strong>До:</strong> {claims[c.before_claim]?.text}</p><p><strong>После:</strong> {claims[c.after_claim]?.text}</p><small>{units[claims[c.before_claim]?.unit_id]} → {units[claims[c.after_claim]?.unit_id]}</small>{c.checks && <p className="candidate-checks">{c.checks.same_owner?"Владелец совпадает":"Владельцы различаются"} · {c.checks.same_modality?"Модальность совпадает":"Модальность различается"} · {c.checks.same_context?"Контекст совпадает":"Контекст различается"}</p>}</button>
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -468,7 +493,7 @@ function App() {
             <strong>Human decides.</strong>
           </p>
           <div className="sidebar-footer">
-            ORG-X <span>v1.0</span>
+            ORG-X <span>v2.0</span>
           </div>
         </div>
       </aside>
@@ -495,6 +520,8 @@ function App() {
                   ? "От изменений — к ответственности"
                   : page === "functions"
                     ? "Каждый вывод — с доказательством"
+                    : page === "matrix"
+                      ? "Функции до и после — рядом"
                     : page === "units"
                       ? "Что изменилось в структуре"
                       : "Аналитическое заключение"}
@@ -544,16 +571,17 @@ function App() {
               <div className="flex justify-center flex-wrap gap-3">
                 <button
                   className="button primary"
-                  disabled={busy || !health.demo_available}
-                  onClick={() => run(true)}
+                  disabled={busy}
+                  onClick={() => run("synthetic")}
                 >
                   {busy ? (
                     <LoaderCircle className="spin" size={16} />
                   ) : (
                     <ArrowRight size={16} />
                   )}
-                  Открыть контрольную пару
+                  Открыть контрольный комплект
                 </button>
+                {health.demo_available && <button className="button secondary" disabled={busy} onClick={()=>run("original")}>Оригинальная пара · ред. 8 → 9</button>}
                 <button
                   className="button secondary"
                   onClick={() => setUpload(true)}
@@ -562,7 +590,7 @@ function App() {
                   Загрузить документы
                 </button>
               </div>
-              <small>Редакции 8 и 9 · Внутренний аудит · DOCX</small>
+              <small>Контрольный комплект — синтетические данные: 3 файла до и 3 после. Оригиналы доступны отдельно при наличии.</small>
               <div className="welcome-features">
                 <div>
                   <span>01</span>Организационная модель
@@ -577,11 +605,12 @@ function App() {
             </section>
           ) : (
             <>
+              {record.ir.documents.some(d=>d.spans.some(s=>s.exact_text.includes("Синтетический контрольный пример ORG-X"))) && <div className="synthetic-notice">Синтетический контрольный пример. Эти подразделения и функции не являются фактами документов Казахтелекома.</div>}
               <section className="document-strip">
                 <div className="doc-pair">
                   {record.ir.documents.map((d, i) => (
                     <React.Fragment key={d.id}>
-                      {i === 1 && (
+                      {i > 0 && d.version !== record.ir.documents[i-1].version && (
                         <ArrowRight className="doc-arrow" size={17} />
                       )}
                       <button
@@ -737,7 +766,7 @@ function App() {
                               <span>+</span>
                               <div>
                                 {c.title}
-                                <small>Новое в перечне §3.4</small>
+                                <small>Новое в переданном перечне</small>
                               </div>
                               <ArrowUpRight size={15} />
                             </button>
@@ -792,6 +821,7 @@ function App() {
                   )}
                 </section>
               )}
+              {page === "matrix" && <AuditMatrix record={record} openFinding={openFinding} openSources={openSources}/>}
               {page === "units" && (
                 <>
                   <div className="section-note">
@@ -841,6 +871,7 @@ function App() {
                       <ArrowDownToLine size={16} />
                       Audit JSON
                     </a>
+                    <a className="button secondary" href={`/api/audits/${record.id}/report.md`} download>Заключение с решениями</a>
                   </div>
                   {record.conclusion.map((c, i) => (
                     <div className="conclusion-item" key={i}>
@@ -857,6 +888,9 @@ function App() {
                       </div>
                     </div>
                   ))}
+                  <div className="review-progress"><strong>Решения аудитора: {Object.keys(latest).length} из {record.findings.length}</strong><p>Принято: {Object.values(latest).filter(r=>r.status==="ACCEPTED").length} · Отклонено: {Object.values(latest).filter(r=>r.status==="REJECTED").length} · Нужны данные: {Object.values(latest).filter(r=>r.status==="NEEDS_INFO").length}. Это отдельный журнал; системные выводы сохраняются.</p></div>
+                  <h3>Что нужно сделать аудитору</h3>
+                  {(record.recommendations||[]).map((r,i)=><div className="recommendation" key={i}><span className={`badge ${r.priority==="high"?"red":"amber"}`}>{r.priority==="high"?"Приоритетно":"Проверить"}</span><p>{r.action}</p><button className="text-button" onClick={()=>{const f=record.findings.find(f=>f.id===r.finding_ids[0]);if(f)openFinding(f)}}>Открыть связанный вывод · всего {r.finding_ids.length}</button></div>)}
                   <div className="limitations">
                     <h3>Границы заключения</h3>
                     {record.limitations.map((l, i) => (
@@ -897,7 +931,7 @@ function App() {
           <div className="modal-heading">
             <div>
               <div className="eyebrow">НОВЫЙ АУДИТ</div>
-              <h2>Сравнить две версии</h2>
+              <h2>Сравнить два комплекта</h2>
             </div>
             <button
               className="icon-button"
@@ -909,7 +943,7 @@ function App() {
           </div>
           <p className="muted">
             Загрузите документы в порядке «до» и «после» изменений. DOCX, PDF с
-            текстом или XLSX, до 20 МБ каждый.
+            текстом или XLSX. До 8 файлов на версию, 20 МБ на файл, 40 МБ суммарно.
           </p>
           {["before", "after"].map((v, i) => (
             <div className="upload-slot" key={v}>
@@ -918,15 +952,16 @@ function App() {
               </div>
               <label>
                 <Upload size={22} />
-                <strong>{files[v]?.name || "Выбрать документ"}</strong>
-                <span>Нажмите, чтобы открыть файл</span>
+                <strong>{files[v]?.length ? files[v].map(f=>f.name).join(", ") : "Выбрать документы"}</strong>
+                <span>Можно выбрать несколько файлов</span>
                 <input
                   ref={i === 0 ? beforeFile : afterFile}
                   type="file"
+                  multiple
                   aria-label={i === 0 ? "Документ до" : "Документ после"}
                   accept=".docx,.pdf,.xlsx"
                   onChange={(e) =>
-                    setFiles({ ...files, [v]: e.target.files?.[0] })
+                    setFiles({ ...files, [v]: Array.from(e.target.files || []) })
                   }
                 />
               </label>
@@ -939,7 +974,7 @@ function App() {
           )}
           <button
             className="button primary full"
-            disabled={busy || !files.before || !files.after}
+            disabled={busy || !files.before.length || !files.after.length}
             onClick={() => run()}
           >
             {busy ? (
@@ -951,6 +986,7 @@ function App() {
               ? "Строим модель и проверяем доказательства…"
               : "Начать анализ"}
           </button>
+          <div className="demo-actions"><button className="text-button" disabled={busy} onClick={()=>run("synthetic")}>Синтетический контрольный комплект</button>{health.demo_available && <button className="text-button" disabled={busy} onClick={()=>run("original")}>Оригинальная пара 8 → 9</button>}</div>
           <p className="privacy-note">
             <ShieldCheck size={13} />
             Документы обрабатываются локально. AI по умолчанию отключён.
@@ -994,6 +1030,10 @@ function App() {
                   Поиск и кандидаты
                 </button>
                 <button
+                  className={drawerTab === "investigation" ? "active" : ""}
+                  onClick={() => setDrawerTab("investigation")}
+                >Журнал исследования</button>
+                <button
                   className={drawerTab === "decision" ? "active" : ""}
                   onClick={() => setDrawerTab("decision")}
                 >
@@ -1027,10 +1067,7 @@ function App() {
                       <span className={version}>
                         {version === "before" ? "ДО" : "ПОСЛЕ"}
                       </span>
-                      {
-                        record?.ir.documents.find((d) => d.version === version)
-                          ?.name
-                      }
+                      Комплект · {record?.ir.documents.filter(d=>d.version===version).length} файл(ов)
                     </div>
                     {selectedSpans
                       .filter((s) => s.version === version)
@@ -1041,7 +1078,7 @@ function App() {
                           id={s.id}
                         >
                           <div>
-                            <strong>§ {s.clause || "Без номера"}</strong>
+                            <strong>{record?.ir.documents.find(d=>d.id===s.document_id)?.name} · § {s.clause || "Без номера"}</strong>
                             <span>
                               {s.paragraph_id} · {s.locator}
                             </span>
@@ -1050,7 +1087,7 @@ function App() {
                           <details>
                             <summary>Контекст абзаца</summary>
                             {record?.ir.documents
-                              .find((d) => d.version === version)
+                              .find((d) => d.id === s.document_id)
                               ?.spans.filter(
                                 (_, idx, all) =>
                                   all[idx - 1]?.id === s.id ||
@@ -1084,7 +1121,7 @@ function App() {
                         <span>Область поиска</span>
                         <strong>
                           {currentSearch.searched_span_ids.length} фрагментов
-                          «после»
+                          «{currentSearch.searched_version === "before" ? "до" : "после"}» · {currentSearch.searched_document_ids?.length || 1} файл(ов)
                         </strong>
                       </div>
                       <div>
@@ -1128,6 +1165,7 @@ function App() {
                     {currentSearch.candidates.length === 0 && (
                       <p>Кандидатов нет. Это не доказывает потерю функции.</p>
                     )}
+                    {!!currentSearch.matched_span_ids?.length && <><h3>Найденные фрагменты корпуса</h3><p className="muted">Включая текст за пределами распознанных функций. Сходство не подтверждает эквивалентность.</p>{currentSearch.matched_span_ids.map(id=><button className="candidate" key={id} onClick={()=>{setSourceIds([...(finding?.source_span_ids||[]),id]);setDrawerTab("evidence")}}><small>{record?.ir.documents.find(d=>d.id===spans[id].document_id)?.name} · §{spans[id].clause}</small><p>{spans[id].exact_text}</p></button>)}</>}
                   </>
                 ) : (
                   <p className="muted">
@@ -1152,9 +1190,16 @@ function App() {
                     {saving ? "Обработка…" : "Предложить пары через AI"}
                   </button>
                   {aiMessage && <p role="status">{aiMessage}</p>}
+                  {aiCandidates.filter(c=>finding?.before_claim_id ? c.before_claim===finding.before_claim_id : finding?.after_claim_ids.includes(c.after_claim)).map(candidateCard)}
                 </div>
               </>
             )}
+            {drawerTab === "investigation" && finding && <>
+              <h3>Протокол локальных проверок</h3><p className="muted">Запросы, проверенные источники и применённое правило из этого аудита. Протокол воспроизводим; это не скрытое рассуждение модели.</p>
+              <ol className="investigation-log">{record?.investigations?.find(i=>i.finding_id===finding.id)?.steps.map((step,i)=><li key={i}><strong>{step.action}</strong><p>{step.detail}</p>{step.source_span_ids.length>0 && <button className="text-button" onClick={()=>{setSourceIds(step.source_span_ids);setDrawerTab("evidence")}}>Проверить {step.source_span_ids.length} фрагм.</button>}</li>)}</ol>
+              <div className="ai-block"><Sparkles size={20}/><h3>Исследование с AI</h3><p>AI выбирает поисковые запросы, читает найденные функции и предлагает пары после проверки обеих версий. По нажатию выбранные фрагменты и результаты поиска передаются в OpenAI. Максимум 10 действий; системные выводы сохраняются.</p><button className="button secondary" disabled={!health.ai_enabled || saving} onClick={investigateFinding}>{saving?"AI исследует источники…":"Запустить AI-исследование"}</button>{!health.ai_enabled && <p>Внешний AI отключён. Локальные проверки выше доступны полностью.</p>}{aiMessage && <p role="status">{aiMessage}</p>}</div>
+              {aiInvestigation?.finding_id===finding.id && <><h3>{aiInvestigation.cached?"Сохранённое AI-исследование":"Выполненные действия AI"}</h3><ol className="investigation-log">{aiInvestigation.steps.map(step=><li key={step.number}><strong>{{search_evidence:"Поиск доказательств",inspect_claim:"Проверка функции и владельца",propose_pair:"Предложение соответствия"}[step.tool]||"Запрос инструмента"} · {step.status==="OK"?"выполнено":"отклонено проверкой"}</strong>{typeof step.arguments.query==="string" && <p>Запрос: {step.arguments.query} · {step.arguments.version==="before"?"до":"после"}</p>}{typeof step.arguments.claim_id==="string" && <p>{claims[step.arguments.claim_id]?.text}</p>}{step.source_span_ids.length>0 && <button className="text-button" onClick={()=>{setSourceIds(step.source_span_ids);setDrawerTab("evidence")}}>Открыть использованные источники</button>}</li>)}</ol>{aiInvestigation.candidates.map(candidateCard)}{!aiInvestigation.candidates.length && <p>Проверенных предложений нет. Требуется решение аудитора.</p>}</>}
+            </>}
             {drawerTab === "decision" && finding && (
               <>
                 <h3>Зафиксировать решение</h3>
