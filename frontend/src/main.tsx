@@ -32,7 +32,7 @@ const labels: Record<FindingType, string> = {
   MOVED: "Перенесена",
   POTENTIAL_GAP: "Возможный пробел",
   POTENTIAL_DUPLICATE: "Возможное дублирование",
-  POTENTIAL_AUTHORITY_CONFLICT: "Конфликт полномочий · риск",
+  POTENTIAL_AUTHORITY_CONFLICT: "Риск конфликта полномочий",
   REQUIRES_HUMAN_REVIEW: "Нужна проверка",
 };
 const tones: Record<FindingType, string> = {
@@ -46,7 +46,7 @@ const tones: Record<FindingType, string> = {
 const unitLabels: Record<string, string> = {
   RETAINED: "Сохранено",
   NEW: "Добавлено",
-  REORGANIZED: "Изменены роли",
+  REORGANIZED: "Преобразовано",
   REQUIRES_HUMAN_REVIEW: "Нужна проверка",
 };
 const reviewLabels: Record<string, string> = {
@@ -847,7 +847,7 @@ function App() {
                           className={`badge ${c.status === "NEW" ? "blue" : c.status === "RETAINED" ? "green" : "amber"}`}
                         >
                           <i />
-                          {unitLabels[c.status]}
+                          {c.id === "role-reorganization" ? "Изменены роли" : unitLabels[c.status]}
                         </span>
                         <h2>{c.title}</h2>
                         <p>{c.detail}</p>
