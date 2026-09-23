@@ -1,7 +1,7 @@
 """Transparent local retrieval. Scores rank candidates, never prove equivalence."""
 
 import re
-from .ingest import normalize_content, digest
+from .ingest import normalized, normalize_content, digest
 from .models import SearchResult
 
 STOP = {"и", "в", "по", "с", "для", "на", "о", "об", "к", "из", "во", "от", "а", "б"}
@@ -47,7 +47,7 @@ def corpus_search(documents, query, version, key):
         searched_span_ids=[s.id for d in docs for s in d.spans],
         candidates=[],
         exact_match_count=sum(
-            normalize_content(query) == normalize_content(s.exact_text)
+            normalize_content(query) == normalized(s.exact_text)
             for d in docs
             for s in d.spans
         ),

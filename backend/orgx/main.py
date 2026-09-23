@@ -103,10 +103,13 @@ def create_app(db_path=None):
             "status": "ok",
             "engine_version": ENGINE_VERSION,
             "ai_enabled": os.getenv("ORGX_ENABLE_OPENAI", "0") == "1",
-            "demo_available": len(
-                list((ROOT / "work/hackalem/kazakhtelecom").glob("*.docx"))
-            )
-            == 2,
+            "demo_available": all(
+                (ROOT / "work/hackalem/kazakhtelecom" / name).is_file()
+                for name in (
+                    "Внутренний_аудит_редакция_8_до.docx",
+                    "Внутренний_аудит_редакция_9_после.docx",
+                )
+            ),
         }
 
     @app.post("/api/audits")
@@ -221,7 +224,17 @@ def create_app(db_path=None):
         record = get_record(audit_id)
         if not any(f.id == finding_id for f in record.findings):
             raise HTTPException(404, "Вывод не найден")
-        return investigate(record, finding_id, store, enabled=os.getenv("ORGX_ENABLE_OPENAI", "0") == "1", model=os.getenv("OPENAI_MODEL", ""), api_key=os.getenv("OPENAI_API_KEY", ""))
+        return investigate(
+            record,
+            finding_id,
+            store,
+            enabled=os.getenv("ORGX_ENABLE_OPENAI", "0") == "1",
+            model=os.getenv("OPENAI_MODEL", ""),
+            api_key=os.getenv("OPENAI_API_KEY", ""),
+        )
+
+    from .debugger_api import debugger_router
+    app.include_router(debugger_router(get_record))
 
     dist = ROOT / "frontend/dist"
     if dist.is_dir():

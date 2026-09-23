@@ -25,6 +25,7 @@ import {
 import type { Audit, Claim, Finding, FindingType, Review, Span, Candidate, AIInvestigation } from "./types";
 import { AuditMatrix } from "./AuditMatrix";
 import "./style.css";
+import { OrganizationalDebugger } from "./OrganizationalDebugger";
 
 const labels: Record<FindingType, string> = {
   PRESERVED: "Сохранена",
@@ -54,6 +55,7 @@ const reviewLabels: Record<string, string> = {
   NEEDS_INFO: "Нужны данные",
 };
 const nav = [
+  { id: "debugger", name: "Организационные тесты", icon: CheckCheck },
   { id: "overview", name: "Обзор аудита", icon: LayoutDashboard },
   { id: "functions", name: "Функции и выводы", icon: GitBranch },
   { id: "matrix", name: "Матрица функций", icon: ListFilter },
@@ -152,7 +154,7 @@ function Modal({
 
 function App() {
   const [record, setRecord] = useState<Audit | null>(null),
-    [page, setPage] = useState("overview"),
+    [page, setPage] = useState("debugger"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [upload, setUpload] = useState(false);
@@ -264,6 +266,7 @@ function App() {
     setNote("");
     setReviewError("");
     setAiInvestigation(null);
+    setAiMessage("");
   };
   const openSources = (ids: string[]) => {
     setFinding(null);
@@ -296,7 +299,7 @@ function App() {
       setRecord(result.record);
       setCached(result.cached);
       setElapsed((performance.now() - t) / 1000);
-      setPage("overview");
+      setPage("debugger");
       setFilter("ALL");
       setQuery("");
       setUpload(false);
@@ -419,10 +422,10 @@ function App() {
           <div className="source-meta">
             <Link2 size={12} />
             {f.source_span_ids.length} фрагм. ·{" "}
-            {f.source_span_ids
+            {claim ? f.source_span_ids
               .filter((id) => spans[id]?.version === "before")
               .slice(0, 1)
-              .map((id) => `До §${spans[id]?.clause}`)}{" "}
+              .map((id) => `До §${spans[id]?.clause}`) : "Поиск по комплекту до"}{" "}
             <span>→</span> После ·{" "}
             {f.confidence === "high"
               ? "сильная"
@@ -449,7 +452,7 @@ function App() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            setPage("overview");
+            setPage("debugger");
           }}
         >
           <span className="brand-symbol">
@@ -457,7 +460,7 @@ function App() {
           </span>
           ORG<span className="brand-x">-X</span>
         </a>
-        <div className="brand-caption">ORGANIZATIONAL CHANGE AUDITOR</div>
+        <div className="brand-caption">THE ORGANIZATIONAL DEBUGGER</div>
         <div className="workspace-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
         <div className="workspace">
           <span>Н</span>
@@ -493,7 +496,7 @@ function App() {
             <strong>Human decides.</strong>
           </p>
           <div className="sidebar-footer">
-            ORG-X <span>v2.0</span>
+            ORG-X <span>v2.1</span>
           </div>
         </div>
       </aside>
@@ -516,7 +519,7 @@ function App() {
             <div>
               <div className="eyebrow">АУДИТ ОРГАНИЗАЦИОННЫХ ИЗМЕНЕНИЙ</div>
               <h1>
-                {page === "overview"
+                {page === "debugger" ? "Проверка непрерывности ответственности" : page === "overview"
                   ? "От изменений — к ответственности"
                   : page === "functions"
                     ? "Каждый вывод — с доказательством"
@@ -782,6 +785,7 @@ function App() {
                   </div>
                 </>
               )}
+              {page === "debugger" && <OrganizationalDebugger record={record} onSources={openSources} onFinding={(id) => { const f = record.findings.find(f => f.id === id); if (f) openFinding(f); }} />}
               {page === "functions" && (
                 <section className="panel">
                   <div className="filter-bar">

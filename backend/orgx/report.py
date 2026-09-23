@@ -21,6 +21,7 @@ LABELS = {
     "REQUIRES_HUMAN_REVIEW": "Нужна проверка",
     "AFTER_ONLY": "Соответствие до не установлено",
 }
+AUTHORITY_LABELS = {"duty": "обязанность", "right": "право", "prohibition": "запрет"}
 ORDER = {
     k: i
     for i, k in enumerate(
@@ -87,7 +88,13 @@ def enrich_record(record):
                     if findings
                     else "AFTER_ONLY"
                 ),
-                source_span_ids=list(dict.fromkeys(old_ids + ac.source_span_ids)),
+                source_span_ids=list(
+                    dict.fromkeys(
+                        ac.source_span_ids
+                        + [s for f in findings for s in f.source_span_ids]
+                        + old_ids
+                    )
+                ),
                 search_result_ids=[search.id],
             )
         )
@@ -100,9 +107,9 @@ def enrich_record(record):
             InvestigationStep(
                 action="Проверка исходного основания",
                 detail=(
-                    f"Владелец: {units[bc.unit_id].name}. Полномочие: {bc.authority}."
+                    f"Владелец: {units[bc.unit_id].name}. Полномочие: {AUTHORITY_LABELS.get(bc.authority, bc.authority)}."
                     if bc
-                    else "Сопоставлены прямые фрагменты двух версий."
+                    else "Прежнее соответствие не установлено. Проверены результаты поиска по комплекту «до» и прямые фрагменты новой версии."
                 ),
                 source_span_ids=[
                     s for s in finding.source_span_ids if spans[s].version == "before"
@@ -113,7 +120,7 @@ def enrich_record(record):
             steps.append(
                 InvestigationStep(
                     action="Поиск по комплекту",
-                    detail=f"Запрос: {search.query}\nВерсия: {search.searched_version}; файлов: {len(search.searched_document_ids) or 1}; просмотрено фрагментов: {len(search.searched_span_ids)}; точных совпадений: {search.exact_match_count}.",
+                    detail=f"Запрос: {search.query}\nВерсия: {'до' if search.searched_version == 'before' else 'после'}; файлов: {len(search.searched_document_ids) or 1}; просмотрено фрагментов: {len(search.searched_span_ids)}; точных совпадений: {search.exact_match_count}.",
                     source_span_ids=search.matched_span_ids,
                     search_result_ids=[search.id],
                 )
@@ -123,7 +130,7 @@ def enrich_record(record):
                 action="Проверка владельцев и контекста",
                 detail=(
                     "\n".join(
-                        f"{units[c.unit_id].name} · {c.authority} · контекст: {c.context_text or 'не указан отдельно'}"
+                        f"{units[c.unit_id].name} · {AUTHORITY_LABELS.get(c.authority, c.authority)} · контекст: {c.context_text or 'не указан отдельно'}"
                         for c in inspected
                     )
                     or "Явный соответствующий владелец среди извлечённых функций не подтверждён."
@@ -201,7 +208,7 @@ def enrich_record(record):
             spans[c.source_span_ids[0]].document_id == doc.id for c in record.ir.claims
         ):
             limitations.append(
-                f"{doc.name}: функции структурно не извлечены; текст включён в поиск, состав документа требует проверки."
+                f"{'До' if doc.version == 'before' else 'После'} · {doc.name}: функции структурно не извлечены; текст включён в поиск, состав документа требует проверки."
             )
     return record.model_copy(
         update={

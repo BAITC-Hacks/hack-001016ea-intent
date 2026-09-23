@@ -97,7 +97,12 @@ def test_same_sources_same_canonical_record(real_documents, real_audit):
 
 def test_matching_batches_search_whole_after_version(real_audit):
     for search in real_audit.search_results:
-        ids = {s.id for d in real_audit.ir.documents if d.version == search.searched_version for s in d.spans}
+        ids = {
+            s.id
+            for d in real_audit.ir.documents
+            if d.version == search.searched_version
+            for s in d.spans
+        }
         assert search.exhaustive
         assert set(search.searched_span_ids) == ids
 

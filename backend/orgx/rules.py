@@ -184,7 +184,9 @@ def apply_general_rules(ir, changes, findings, searches, add):
         if ua.key == ub.key and not conflict:
             continue
         pair = tuple(sorted([a.id, b.id]))
-        if pair in seen or len(token_map[a.id]) < 4 or len(token_map[b.id]) < 4:
+        if pair in seen or (
+            not conflict and (len(token_map[a.id]) < 4 or len(token_map[b.id]) < 4)
+        ):
             continue
         intersection = len(token_map[a.id] & token_map[b.id])
         similarity = intersection / max(1, len(token_map[a.id] | token_map[b.id]))

@@ -1,4 +1,5 @@
 """Rebuild the tracked synthetic DOCX fixtures; never reads private sources."""
+
 from io import BytesIO
 import json
 from pathlib import Path
@@ -21,7 +22,9 @@ def generate(root=ROOT / "examples/control"):
             source = BytesIO()
             doc.save(source)
             # Stable ZIP metadata makes fixture regeneration byte-for-byte repeatable.
-            with ZipFile(source) as incoming, ZipFile(root / version / name, "w", ZIP_DEFLATED) as output:
+            with ZipFile(source) as incoming, ZipFile(
+                root / version / name, "w", ZIP_DEFLATED
+            ) as output:
                 for item in sorted(incoming.namelist()):
                     info = ZipInfo(item, date_time=(2020, 1, 1, 0, 0, 0))
                     info.compress_type = ZIP_DEFLATED

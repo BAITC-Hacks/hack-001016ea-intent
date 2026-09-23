@@ -1,5 +1,6 @@
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from .debugger_models import Responsibility, OrganizationalTest
 
 Version = Literal["before", "after"]
 FindingType = Literal[
@@ -26,6 +27,32 @@ class SourceSpan(Model):
     exact_text: str
     locator: str
     style: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def verify_derived_hashes(cls, value):
+        if isinstance(value, dict):
+            from .ingest import digest, normalized
+            value = dict(value)
+            text = value.get("exact_text", "")
+            for field, expected in (("text_hash", digest(text.encode("utf-8"))),
+                                    ("content_hash", digest(normalized(text).encode("utf-8")))):
+                supplied = value.pop(field, expected)
+                if supplied != expected:
+                    raise ValueError("Source text hash mismatch")
+        return value
+
+    @computed_field
+    @property
+    def text_hash(self) -> str:
+        from .ingest import digest
+        return digest(self.exact_text.encode("utf-8"))
+
+    @computed_field
+    @property
+    def content_hash(self) -> str:
+        from .ingest import digest, normalized
+        return digest(normalized(self.exact_text).encode("utf-8"))
 
 
 class Document(Model):
@@ -168,3 +195,6 @@ class AuditRecord(Model):
     matrix: list[MatrixRow] = Field(default_factory=list)
     investigations: list[Investigation] = Field(default_factory=list)
     recommendations: list[Recommendation] = Field(default_factory=list)
+    responsibilities: list[Responsibility] = Field(default_factory=list)
+    organizational_tests: list[OrganizationalTest] = Field(default_factory=list)
+    test_summary: dict[str, int] = Field(default_factory=dict)

@@ -13,8 +13,8 @@ from .ingest import normalized, normalize_content, digest
 from .extract import body_spans, inventory_spans
 from .corpus import Corpus, ordered_documents
 
-ENGINE_VERSION = "orgx-2.0.0"
-POLICY_VERSION = "evidence-policy-2.0.0"
+ENGINE_VERSION = "orgx-2.1.0"
+POLICY_VERSION = "evidence-policy-2.1.0"
 STOP = {"и", "в", "по", "с", "для", "на", "о", "об", "к", "из", "во", "от", "а", "б"}
 
 
@@ -590,7 +590,7 @@ def audit(ir: OrganizationalIR) -> AuditRecord:
             **counts,
         },
         limitations=[
-            "Автоматическое извлечение обязанностей поддерживает разделы «Цели, задачи и функции внутреннего аудита» и «Права и обязанности» данного типа положений; номера могут меняться. Остальные разделы доступны для поиска и специальных доказательных правил.",
+            "Автоматическое извлечение поддерживает явно названные разделы функций, прав и обязанностей с распознаваемыми заголовками владельцев; номера могут меняться. Произвольная структура, сканы и схемы не покрываются универсальным парсером. Остальной извлечённый текст доступен для поиска.",
             "Перечень подразделений выявляется по явно названному списку состава. Юридический факт и дата создания не выводятся из появления названия.",
             "Полнота семантического покрытия не гарантируется. Пустые пункты, неизвестные структуры и неоднозначные пары требуют человека.",
             "Приложения, на которые только ссылается документ, не входят в доказательную базу. Все выводы рекомендательные.",
@@ -601,19 +601,30 @@ def audit(ir: OrganizationalIR) -> AuditRecord:
     from .report import enrich_record
 
     record = enrich_record(record)
+    from .organizational_tests import attach_debugger
+    record = attach_debugger(record)
     validate_record(record)
     return record
 
 
 def validate_record(record: AuditRecord):
+    from .source_integrity import validate_sources
+    validate_sources(record)
     spans = {s.id: s for d in record.ir.documents for s in d.spans}
     searches = {s.id: s for s in record.search_results}
     claims = {c.id: c for c in record.ir.claims}
     document_ids = {d.id for d in record.ir.documents if d.version == "after"}
-    if len(spans) != sum(len(d.spans) for d in record.ir.documents) or len(claims) != len(record.ir.claims):
+    if len(spans) != sum(len(d.spans) for d in record.ir.documents) or len(
+        claims
+    ) != len(record.ir.claims):
         raise ValueError("Duplicate source or claim IDs")
     for search in record.search_results:
-        expected = {s.id for d in record.ir.documents if d.version == search.searched_version for s in d.spans}
+        expected = {
+            s.id
+            for d in record.ir.documents
+            if d.version == search.searched_version
+            for s in d.spans
+        }
         if not search.exhaustive or set(search.searched_span_ids) != expected:
             raise ValueError("Incomplete search manifest")
         if any(s not in expected for s in search.matched_span_ids):
@@ -637,7 +648,10 @@ def validate_record(record: AuditRecord):
                 x not in searches for x in ev.search_result_ids
             ):
                 raise ValueError("Broken evidence chain")
-        if f.before_claim_id and (f.before_claim_id not in claims or claims[f.before_claim_id].version != "before"):
+        if f.before_claim_id and (
+            f.before_claim_id not in claims
+            or claims[f.before_claim_id].version != "before"
+        ):
             raise ValueError("Unknown before claim")
         if any(
             x not in claims or claims[x].version != "after" for x in f.after_claim_ids
@@ -645,13 +659,27 @@ def validate_record(record: AuditRecord):
             raise ValueError("Unknown after claim")
     findings = {f.id for f in record.findings}
     for row in record.matrix:
-        if any(c not in claims or claims[c].version != "after" for c in row.after_claim_ids) or (row.before_claim_id and (row.before_claim_id not in claims or claims[row.before_claim_id].version != "before")):
+        if any(
+            c not in claims or claims[c].version != "after" for c in row.after_claim_ids
+        ) or (
+            row.before_claim_id
+            and (
+                row.before_claim_id not in claims
+                or claims[row.before_claim_id].version != "before"
+            )
+        ):
             raise ValueError("Broken matrix claim")
-        if any(s not in spans for s in row.source_span_ids) or any(f not in findings for f in row.finding_ids) or any(s not in searches for s in row.search_result_ids):
+        if (
+            any(s not in spans for s in row.source_span_ids)
+            or any(f not in findings for f in row.finding_ids)
+            or any(s not in searches for s in row.search_result_ids)
+        ):
             raise ValueError("Broken matrix evidence")
     for investigation in record.investigations:
         if investigation.finding_id not in findings:
             raise ValueError("Unknown investigation finding")
         for step in investigation.steps:
-            if any(s not in spans for s in step.source_span_ids) or any(s not in searches for s in step.search_result_ids):
+            if any(s not in spans for s in step.source_span_ids) or any(
+                s not in searches for s in step.search_result_ids
+            ):
                 raise ValueError("Broken investigation evidence")

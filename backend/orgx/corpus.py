@@ -9,7 +9,7 @@ def ordered_documents(documents):
     docs = sorted(documents, key=lambda d: (d.version != "before", d.name, d.sha256))
     if {d.version for d in docs} != {"before", "after"}:
         raise ValueError("Нужен хотя бы один документ в каждом комплекте.")
-    if len({d.id for d in docs}) != len(docs):
+    if len({(d.version, d.sha256) for d in docs}) != len(docs):
         raise ValueError(
             "Один и тот же файл повторяется внутри версии; удалите дубликат."
         )
